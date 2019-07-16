@@ -6,9 +6,9 @@ import math
 from shutil import copyfile
 import tarfile
 from tqdm import tqdm
-
+from sklearn.preprocessing import MinMaxScaler
 import numpy as np
-import pypianoroll as ppr
+# import pypianoroll as ppr
 import tensorflow as tf
 from tensorflow.contrib.learn.python.learn.datasets import mnist
 
@@ -98,193 +98,193 @@ class DataGenerator(metaclass=ABCMeta):
         pass
 
 
-class MusicDataGenerator(DataGenerator):
-    def __init__(self, para):
-        DataGenerator.__init__(self, para)
-
-        self.DATA_PATH = None
-        self.FILENAME = None
-        self.DATA_FULL_PATH = None
-        self.DATASET_ID = None
-
-        para.input_size = self.INPUT_SIZE = 128
-        para.max_len = self.MAX_LEN = 16
-        para.output_size = self.OUTPUT_SIZE = 128
-        para.total_len = 64
-
-    def _download_file(self):
-        logging.info(
-            "Downloading %s dataset from Google drive..." % self.para.data_set)
-        create_dir(self.DATA_PATH)
-        download_file_from_google_drive(self.DATASET_ID,
-                                        self.DATA_FULL_PATH + ".tar")
-
-    def _extract_file(self):
-        if not check_path_exists(self.DATA_FULL_PATH):
-            logging.info("Extracting %s dataset..." % self.para.data_set)
-            tarfile.open(self.DATA_FULL_PATH + ".tar").extractall(
-                path=self.DATA_PATH)
-
-    def _decode(self, serialized_example):
-        features = tf.parse_single_example(
-            serialized_example,
-            features={"pianoroll": tf.VarLenFeature(tf.int64)},
-        )
-        pianoroll = tf.sparse_tensor_to_dense(features["pianoroll"])
-
-        pianoroll = tf.cast(
-            tf.reshape(pianoroll, [self.MAX_LEN + 1, self.INPUT_SIZE]),
-            tf.float32,
-        )
-        return pianoroll
-
-    def _get_map_functions(self):
-        return [self._augment]
-
-    def _augment(self, pianoroll):
-        # pianoroll: [self.MAX_LEN + 1, self.OUTPUT_SIZE]
-        rnn_input = tf.slice(pianoroll, [0, 0],
-                             [self.MAX_LEN, self.OUTPUT_SIZE])
-        rnn_input_len = tf.constant(self.MAX_LEN, dtype=tf.int32)
-        target_output = tf.slice(pianoroll, [1, 0],
-                                 [self.MAX_LEN, self.OUTPUT_SIZE])
-        return rnn_input, rnn_input_len, target_output
-
-    def _convert_to_tfrecords(self, mode, filename_list):
-        filename = self.DATA_PATH + "/" + mode + ".tfrecords"
-        if check_path_exists(filename):
-            return
-
-        logging.info("Writing {}".format(filename))
-        with tf.python_io.TFRecordWriter(filename) as writer:
-            for filename in tqdm(filename_list):
-                if filename.endswith(".mid") or filename.endswith(".midi"):
-                    multi_track = ppr.parse(filename)
-                else:
-                    multi_track = ppr.load(filename)
-
-                TOTAL_STEPS = self._choose_total_steps(multi_track)
-                if TOTAL_STEPS == 1e8:
-                    continue
-                RANGE = self.INPUT_SIZE
-                FINAL_STEPS = math.ceil(TOTAL_STEPS / 24)
-                multi_data = np.zeros((FINAL_STEPS, RANGE))
-
-                for track in multi_track.tracks:
-                    if not self._is_valid_track(track):
-                        continue
-                    data = track.pianoroll.astype(int)
-                    data = self._sampling(data)
-                    multi_data = np.add(multi_data, data)
-                multi_data = np.clip(multi_data, 0, 1).astype(int)
-
-                RANGE = self._split_into_segments(multi_data, 1)
-                length = self.MAX_LEN
-
-                for start in RANGE:
-                    end = start + length
-                    if end >= FINAL_STEPS:
-                        break
-                    example = tf.train.Example(
-                        features=tf.train.Features(
-                            feature={
-                                "pianoroll":
-                                self._int64_list_feature(
-                                    multi_data[start:end + 1].flatten())
-                            }))
-                    writer.write(example.SerializeToString())
-
-    def _choose_total_steps(self, multi_track):
-        TOTAL_STEPS = 1e8
-        for track in multi_track.tracks:
-            now_steps = track.pianoroll.shape[0]
-            if not self._is_valid_track(track):
-                continue
-            TOTAL_STEPS = min(TOTAL_STEPS, now_steps)
-        return TOTAL_STEPS
-
-    def _is_valid_track(self, track):
-        if track.is_drum:
-            return False
-        if track.pianoroll.shape[0] == 0:
-            return False
-        return True
-
-    def _sampling(self, data):
-        return data[::24]
-
-    def _split_into_segments(self, data, step):
-        return range(0, data.shape[0], step)
-
-
-class MIDIDataGenerator(MusicDataGenerator):
-    def __init__(self, para):
-        MusicDataGenerator.__init__(self, para)
-
-    def _parse_to_tfrecords(self):
-        for mode in ["train", "validation", "test"]:
-            filename_list = []
-            for file_type in ["mid", "midi"]:
-                path = self.DATA_FULL_PATH + "/" + mode + "/*." + file_type
-                filename_list += glob.glob(path, recursive=True)
-            self._convert_to_tfrecords(mode, filename_list)
+# class MusicDataGenerator(DataGenerator):
+#     def __init__(self, para):
+#         DataGenerator.__init__(self, para)
+#
+#         self.DATA_PATH = None
+#         self.FILENAME = None
+#         self.DATA_FULL_PATH = None
+#         self.DATASET_ID = None
+#
+#         para.input_size = self.INPUT_SIZE = 128
+#         para.max_len = self.MAX_LEN = 16
+#         para.output_size = self.OUTPUT_SIZE = 128
+#         para.total_len = 64
+#
+#     def _download_file(self):
+#         logging.info(
+#             "Downloading %s dataset from Google drive..." % self.para.data_set)
+#         create_dir(self.DATA_PATH)
+#         download_file_from_google_drive(self.DATASET_ID,
+#                                         self.DATA_FULL_PATH + ".tar")
+#
+#     def _extract_file(self):
+#         if not check_path_exists(self.DATA_FULL_PATH):
+#             logging.info("Extracting %s dataset..." % self.para.data_set)
+#             tarfile.open(self.DATA_FULL_PATH + ".tar").extractall(
+#                 path=self.DATA_PATH)
+#
+#     def _decode(self, serialized_example):
+#         features = tf.parse_single_example(
+#             serialized_example,
+#             features={"pianoroll": tf.VarLenFeature(tf.int64)},
+#         )
+#         pianoroll = tf.sparse_tensor_to_dense(features["pianoroll"])
+#
+#         pianoroll = tf.cast(
+#             tf.reshape(pianoroll, [self.MAX_LEN + 1, self.INPUT_SIZE]),
+#             tf.float32,
+#         )
+#         return pianoroll
+#
+#     def _get_map_functions(self):
+#         return [self._augment]
+#
+#     def _augment(self, pianoroll):
+#         # pianoroll: [self.MAX_LEN + 1, self.OUTPUT_SIZE]
+#         rnn_input = tf.slice(pianoroll, [0, 0],
+#                              [self.MAX_LEN, self.OUTPUT_SIZE])
+#         rnn_input_len = tf.constant(self.MAX_LEN, dtype=tf.int32)
+#         target_output = tf.slice(pianoroll, [1, 0],
+#                                  [self.MAX_LEN, self.OUTPUT_SIZE])
+#         return rnn_input, rnn_input_len, target_output
+#
+#     def _convert_to_tfrecords(self, mode, filename_list):
+#         filename = self.DATA_PATH + "/" + mode + ".tfrecords"
+#         if check_path_exists(filename):
+#             return
+#
+#         logging.info("Writing {}".format(filename))
+#         with tf.python_io.TFRecordWriter(filename) as writer:
+#             for filename in tqdm(filename_list):
+#                 if filename.endswith(".mid") or filename.endswith(".midi"):
+#                     multi_track = ppr.parse(filename)
+#                 else:
+#                     multi_track = ppr.load(filename)
+#
+#                 TOTAL_STEPS = self._choose_total_steps(multi_track)
+#                 if TOTAL_STEPS == 1e8:
+#                     continue
+#                 RANGE = self.INPUT_SIZE
+#                 FINAL_STEPS = math.ceil(TOTAL_STEPS / 24)
+#                 multi_data = np.zeros((FINAL_STEPS, RANGE))
+#
+#                 for track in multi_track.tracks:
+#                     if not self._is_valid_track(track):
+#                         continue
+#                     data = track.pianoroll.astype(int)
+#                     data = self._sampling(data)
+#                     multi_data = np.add(multi_data, data)
+#                 multi_data = np.clip(multi_data, 0, 1).astype(int)
+#
+#                 RANGE = self._split_into_segments(multi_data, 1)
+#                 length = self.MAX_LEN
+#
+#                 for start in RANGE:
+#                     end = start + length
+#                     if end >= FINAL_STEPS:
+#                         break
+#                     example = tf.train.Example(
+#                         features=tf.train.Features(
+#                             feature={
+#                                 "pianoroll":
+#                                 self._int64_list_feature(
+#                                     multi_data[start:end + 1].flatten())
+#                             }))
+#                     writer.write(example.SerializeToString())
+#
+#     def _choose_total_steps(self, multi_track):
+#         TOTAL_STEPS = 1e8
+#         for track in multi_track.tracks:
+#             now_steps = track.pianoroll.shape[0]
+#             if not self._is_valid_track(track):
+#                 continue
+#             TOTAL_STEPS = min(TOTAL_STEPS, now_steps)
+#         return TOTAL_STEPS
+#
+#     def _is_valid_track(self, track):
+#         if track.is_drum:
+#             return False
+#         if track.pianoroll.shape[0] == 0:
+#             return False
+#         return True
+#
+#     def _sampling(self, data):
+#         return data[::24]
+#
+#     def _split_into_segments(self, data, step):
+#         return range(0, data.shape[0], step)
 
 
-class LPD5DataGenerator(MusicDataGenerator):
-    def __init__(self, para):
-        MusicDataGenerator.__init__(self, para)
-
-        self.DATA_PATH = self.DIRECTORY + "/lpd5_data"
-        self.FILENAME = "lpd_5_cleansed"
-        self.DATA_FULL_PATH = self.DATA_PATH + "/" + self.FILENAME
-        self.DATASET_ID = "1IkfgCwJ6fCjGYLMelDrKV7mGSNF8llex"
-
-        self._download_file()
-        self._extract_file()
-        self._parse_to_tfrecords()
-
-    def _parse_to_tfrecords(self):
-        filename_list = glob.glob(
-            self.DATA_FULL_PATH + "/**/*.npz", recursive=True)
-        num_of_raw_data = len(filename_list)
-
-        l, r = int(num_of_raw_data * 0.8), int(num_of_raw_data * 0.9)
-        self._convert_to_tfrecords("train", filename_list[:l])
-        self._convert_to_tfrecords("validation", filename_list[l:r])
-        self._convert_to_tfrecords("test", filename_list[r:])
-
-    def _split_into_segments(self, data, step):
-        """
-        pianoroll: [num_of_time_steps, 128]
-        segments: list of tuple(start, end)
-        """
-        TOTAL_STEPS, RANGE = data.shape
-        segments = []
-
-        num_of_notes = np.sum(data, axis=1)
-
-        for start in range(0, TOTAL_STEPS, step):
-            if start + self.MAX_LEN >= TOTAL_STEPS:
-                break
-            num_of_total_notes = np.sum(
-                num_of_notes[start:start + self.MAX_LEN])
-            if num_of_total_notes >= 2.0 * self.MAX_LEN:
-                segments.append(start)
-        return segments
-
-
-class MuseDataGenerator(MIDIDataGenerator):
-    def __init__(self, para):
-        MIDIDataGenerator.__init__(self, para)
-
-        self.DATA_PATH = self.DIRECTORY + "/muse_data"
-        self.FILENAME = "MuseData"
-        self.DATA_FULL_PATH = self.DATA_PATH + "/" + self.FILENAME
-        self.DATASET_ID = "1a5361IfxxEY1mmTfqAviiIkq6u2OYFJ7"
-
-        self._download_file()
-        self._extract_file()
-        self._parse_to_tfrecords()
+# class MIDIDataGenerator(MusicDataGenerator):
+#     def __init__(self, para):
+#         MusicDataGenerator.__init__(self, para)
+#
+#     def _parse_to_tfrecords(self):
+#         for mode in ["train", "validation", "test"]:
+#             filename_list = []
+#             for file_type in ["mid", "midi"]:
+#                 path = self.DATA_FULL_PATH + "/" + mode + "/*." + file_type
+#                 filename_list += glob.glob(path, recursive=True)
+#             self._convert_to_tfrecords(mode, filename_list)
+#
+#
+# class LPD5DataGenerator(MusicDataGenerator):
+#     def __init__(self, para):
+#         MusicDataGenerator.__init__(self, para)
+#
+#         self.DATA_PATH = self.DIRECTORY + "/lpd5_data"
+#         self.FILENAME = "lpd_5_cleansed"
+#         self.DATA_FULL_PATH = self.DATA_PATH + "/" + self.FILENAME
+#         self.DATASET_ID = "1IkfgCwJ6fCjGYLMelDrKV7mGSNF8llex"
+#
+#         self._download_file()
+#         self._extract_file()
+#         self._parse_to_tfrecords()
+#
+#     def _parse_to_tfrecords(self):
+#         filename_list = glob.glob(
+#             self.DATA_FULL_PATH + "/**/*.npz", recursive=True)
+#         num_of_raw_data = len(filename_list)
+#
+#         l, r = int(num_of_raw_data * 0.8), int(num_of_raw_data * 0.9)
+#         self._convert_to_tfrecords("train", filename_list[:l])
+#         self._convert_to_tfrecords("validation", filename_list[l:r])
+#         self._convert_to_tfrecords("test", filename_list[r:])
+#
+#     def _split_into_segments(self, data, step):
+#         """
+#         pianoroll: [num_of_time_steps, 128]
+#         segments: list of tuple(start, end)
+#         """
+#         TOTAL_STEPS, RANGE = data.shape
+#         segments = []
+#
+#         num_of_notes = np.sum(data, axis=1)
+#
+#         for start in range(0, TOTAL_STEPS, step):
+#             if start + self.MAX_LEN >= TOTAL_STEPS:
+#                 break
+#             num_of_total_notes = np.sum(
+#                 num_of_notes[start:start + self.MAX_LEN])
+#             if num_of_total_notes >= 2.0 * self.MAX_LEN:
+#                 segments.append(start)
+#         return segments
+#
+#
+# class MuseDataGenerator(MIDIDataGenerator):
+#     def __init__(self, para):
+#         MIDIDataGenerator.__init__(self, para)
+#
+#         self.DATA_PATH = self.DIRECTORY + "/muse_data"
+#         self.FILENAME = "MuseData"
+#         self.DATA_FULL_PATH = self.DATA_PATH + "/" + self.FILENAME
+#         self.DATASET_ID = "1a5361IfxxEY1mmTfqAviiIkq6u2OYFJ7"
+#
+#         self._download_file()
+#         self._extract_file()
+#         self._parse_to_tfrecords()
 
 
 class TimeSeriesDataGenerator(DataGenerator):
@@ -388,3 +388,90 @@ class TimeSeriesDataGenerator(DataGenerator):
         target_output = tf.expand_dims(tf.to_float(example["y"]), 0)
         target_output = tf.tile(target_output, [self.MAX_LEN, 1])
         return rnn_input, rnn_input_len, target_output
+
+
+class customDataGenerator(DataGenerator):
+    def __init__(self, para, df, split_date):
+        '''
+        df: pd.DataFrame, 多栏时间序列,date为时间
+        split_date: [train_set_end_time,valid_set_end_time]
+        '''
+        DataGenerator.__init__(self, para)
+        split_date.append(max(df['date']))
+        self.split = split_date
+        self.split_names = ["train", "validation", "test"]
+        self.h = para.horizon
+        self.DATA_PATH = os.path.join(self.DIRECTORY,
+                                      para.data_set + str(self.h))
+        create_dir(self.DATA_PATH)
+        self.raw_data = df
+        self._preprocess(para)
+
+    def _preprocess(self, para):
+        para.input_size = self.INPUT_SIZE = self.raw_data.shape[1] - 1
+        self.rse = self._compute_rse()
+        para.max_len = self.MAX_LEN = self.para.highway
+        assert self.para.highway == self.para.attention_len
+        para.output_size = self.OUTPUT_SIZE = self.raw_data.shape[1] - 1
+        para.total_len = self.TOTAL_LEN = 1
+        for i in self.raw_data.columns:
+            if i == 'date':
+                continue
+            scaler = MinMaxScaler()
+            self.raw_data[i] = scaler.fit_transform(self.raw_data[[i]])
+
+        df = self.raw_data
+        for i in range(len(self.split)):
+            temp_df = df[df['date'] <= self.split[i]]
+            df = df[df['date'] > self.split[i]]
+            self._convert_to_tfrecords(temp_df, self.split_names[i])
+
+    def _convert_to_tfrecords(self, df, name):
+        df = df.drop(columns='date')
+        df = df.values
+        out_fn = os.path.join(self.DATA_PATH, name + ".tfrecords")
+        if check_path_exists(out_fn):
+            return
+        with tf.python_io.TFRecordWriter(out_fn) as record_writer:
+            for target in tqdm(range(len(df))):
+                end = target - self.h + 1
+                beg = end - self.para.max_len
+                if beg < 0:
+                    continue
+                example = tf.train.Example(
+                    features=tf.train.Features(
+                        feature={
+                            "x":
+                            self._float_list_feature(df[beg:end].
+                                                     flatten()),
+                            "y":
+                            self._float_list_feature(df[target]),
+                        }))
+                record_writer.write(example.SerializeToString())
+
+    def _get_map_functions(self):
+        return []
+
+    def _decode(self, serialized_example):
+        example = tf.parse_single_example(
+            serialized_example,
+            features={
+                "x":
+                tf.FixedLenFeature([self.MAX_LEN, self.INPUT_SIZE],
+                                   tf.float32),
+                "y":
+                tf.FixedLenFeature([self.OUTPUT_SIZE], tf.float32),
+            },
+        )
+        rnn_input = tf.to_float(
+            tf.reshape(example["x"], (self.MAX_LEN, self.INPUT_SIZE)))
+        rnn_input_len = tf.constant(self.MAX_LEN, dtype=tf.int32)
+        target_output = tf.expand_dims(tf.to_float(example["y"]), 0)
+        target_output = tf.tile(target_output, [self.MAX_LEN, 1])
+        return rnn_input, rnn_input_len, target_output
+
+    def _compute_rse(self):
+        df = self.raw_data[(self.raw_data['date'] > self.split[0]) & (
+            self.raw_data['date'] <= self.split[1])]
+        df = df.drop(columns='date')
+        return np.std(df)

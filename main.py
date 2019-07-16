@@ -1,10 +1,11 @@
+# %%
 import os
 import tensorflow as tf
-
 from lib.setup import params_setup, logging_config_setup, config_setup
 from lib.model_utils import create_graph, load_weights, print_num_of_trainable_parameters
 from lib.train import train
 from lib.test import test
+# %%
 
 
 def main():

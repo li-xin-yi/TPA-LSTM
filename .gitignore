@@ -1,3 +1,7 @@
 .python-version
 models/*
 data/*
+lib/__pycache__
+.idea/
+.DS_store
+.parquet

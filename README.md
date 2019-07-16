@@ -1,48 +1,31 @@
+# Custom Input Data
+
+对TPA-LSTM代码工程化封装使用的尝试。
+
 # TPA-LSTM
 
-Original Implementation of [''Temporal Pattern Attention for Multivariate Time Series Forecasting''](https://arxiv.org/abs/1809.04206).
+Forked from [this repo](https://github.com/gantheory/TPA-LSTM): Original Implementation of [''Temporal Pattern Attention for Multivariate Time Series Forecasting''](https://arxiv.org/abs/1809.04206).
 
 ## Dependencies
 
-* python3.6.6
+参照[原repo](https://github.com/gantheory/TPA-LSTM#dependencies)，如果不使用music相关的数据集（e.g. 原论文的`lpd5`或`muse`）则无需`pypianoroll`，使用conda即可导入requirements环境。
 
-You can check and install other dependencies in `requirements.txt`.
+```console
+conda install --file requirements.txt
+```
 
-```
-$ pip install -r requirements.txt
-# to install TensorFlow, you can refer to https://www.tensorflow.org/install/
-```
 
 ## Usage
 
-The following example usage shows how to train and test a TPA-LSTM model on MuseData with settings used in this work.
+参照[demo_test.py](demo_test.py),在atom编辑器使用[hydrogen](https://atom.io/packages/hydrogen)可逐步分条执行指令或导出Jupyter Notebook
 
-### Training
+## Todo List
 
-```
-$ python main.py --mode train \
-    --attention_len 16 \
-    --batch_size 32 \
-    --data_set muse \
-    --dropout 0.2 \
-    --learning_rate 1e-5 \
-    --model_dir ./models/model \
-    --num_epochs 40 \
-    --num_layers 3 \
-    --num_units 338
-```
+- [x] 自定义数据文件作为模型的输入
+  - [x] 增加参数`custom`标记用户自定义数据，`dataset_address`为`.parquet`格式的MTS数据在本地的地址，其中`'date'`字段为时间，`split_date`为划分`['train','test','valid']`依据的时间点
+  - [x] 实现`customDataGenerator`类用于自定义数据导入
+  - [x] 模型成功运行并log输出误差
 
-### Testing
-
-```
-$ python main.py --mode test \
-    --attention_len 16 \
-    --batch_size 32 \
-    --data_set muse \
-    --dropout 0.2 \
-    --learning_rate 1e-5 \
-    --model_dir ./models/model \
-    --num_epochs 40 \
-    --num_layers 3 \
-    --num_units 338
-```
+- [ ] 修正多次在本地导出数据以及其导致的重复log问题
+- [ ] 恢复出预测结果的原始数据并存储
+- [ ] 重新拆分建模逻辑，减少耦合
