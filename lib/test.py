@@ -2,6 +2,7 @@ import logging
 import numpy as np
 from tqdm import tqdm
 
+
 def test(para, sess, model, data_generator):
     sess.run(data_generator.iterator.initializer)
 
@@ -21,7 +22,7 @@ def test(para, sess, model, data_generator):
             )
             if para.mts:
                 test_rse += np.sum(
-                    ((outputs - labels) * data_generator.scale) ** 2
+                    ((outputs - labels) / data_generator.scale) ** 2
                 )
                 all_outputs.append(outputs)
                 all_labels.append(labels)
@@ -56,6 +57,10 @@ def test(para, sess, model, data_generator):
             np.sqrt(test_rse / n_samples) / data_generator.rse
         )
         logging.info("test rse: %.5f, test corr: %.5f" % (test_rse, test_corr))
+        raw_labels = data_generator.scaler.inverse_transform(all_labels) # y_true
+        raw_outputs = data_generator.scaler.inverse_transform(all_outputs) # y_pred
+        pred_df = pd.DataFrame(raw_outputs, columns=data_generator.series)
+        return pred_df
     else:
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)

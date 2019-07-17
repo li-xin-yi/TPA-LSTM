@@ -391,45 +391,53 @@ class TimeSeriesDataGenerator(DataGenerator):
 
 
 class customDataGenerator(DataGenerator):
-    def __init__(self, para, df, split_date):
-        '''
-        df: pd.DataFrame, 多栏时间序列,date为时间
-        split_date: [train_set_end_time,valid_set_end_time]
-        '''
+    def __init__(self, para):
         DataGenerator.__init__(self, para)
-        split_date.append(max(df['date']))
-        self.split = split_date
+        self.split = list(para.split_date)
         self.split_names = ["train", "validation", "test"]
         self.h = para.horizon
         self.DATA_PATH = os.path.join(self.DIRECTORY,
                                       para.data_set + str(self.h))
         create_dir(self.DATA_PATH)
-        self.raw_data = df
+        self._load(para)
         self._preprocess(para)
 
+    def _load(self, para):
+        df = pd.read_parquet(para.dataset_address)
+        self.split.append(max(df['date']))
+        self.raw_data = df
+
     def _preprocess(self, para):
+        print(self.split)
         para.input_size = self.INPUT_SIZE = self.raw_data.shape[1] - 1
         self.rse = self._compute_rse()
+        logging.info('rse = {}'.format(self.rse))
+        print(type(self.rse))
         para.max_len = self.MAX_LEN = self.para.highway
         assert self.para.highway == self.para.attention_len
         para.output_size = self.OUTPUT_SIZE = self.raw_data.shape[1] - 1
         para.total_len = self.TOTAL_LEN = 1
-        for i in self.raw_data.columns:
-            if i == 'date':
-                continue
-            scaler = MinMaxScaler()
-            self.raw_data[i] = scaler.fit_transform(self.raw_data[[i]])
-
         df = self.raw_data
+        series = [i for i in df.columns if i != 'date']
+        scaler = MinMaxScaler()
+        self.raw_data.loc[:, series] = scaler.fit_transform(
+            self.raw_data[series])
+        self.scale = scaler.scale_
+        self.scaler = scaler
+        self.series = series
+
         for i in range(len(self.split)):
+            print(i, self.split[i], self.split_names[i])
             temp_df = df[df['date'] <= self.split[i]]
+            print(len(temp_df))
             df = df[df['date'] > self.split[i]]
             self._convert_to_tfrecords(temp_df, self.split_names[i])
 
     def _convert_to_tfrecords(self, df, name):
-        df = df.drop(columns='date')
-        df = df.values
         out_fn = os.path.join(self.DATA_PATH, name + ".tfrecords")
+        date_fn = os.path.join(self.DATA_PATH, name + '_date.parquet')
+        df = df.drop(columns=['date'])
+        df = df.values
         if check_path_exists(out_fn):
             return
         with tf.python_io.TFRecordWriter(out_fn) as record_writer:
@@ -474,4 +482,4 @@ class customDataGenerator(DataGenerator):
         df = self.raw_data[(self.raw_data['date'] > self.split[0]) & (
             self.raw_data['date'] <= self.split[1])]
         df = df.drop(columns='date')
-        return np.std(df)
+        return np.std(df.values)

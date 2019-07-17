@@ -7,6 +7,9 @@ from lib.model import PolyRNN
 
 
 def create_data_generator(para):
+    if para.custom:
+        from lib.data_generator import customDataGenerator
+        return customDataGenerator(para)
     if para.data_set == 'lpd5':
         from lib.data_generator import LPD5DataGenerator
         return LPD5DataGenerator(para)
