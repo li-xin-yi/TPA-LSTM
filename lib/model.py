@@ -14,7 +14,6 @@ class PolyRNN:
         self._build_graph()
         if self.para.mode == "train":
             self._build_optimizer()
-
         self.saver = tf.train.Saver(max_to_keep=self.para.num_epochs)
 
     def _build_graph(self):

@@ -1,5 +1,7 @@
 import logging
 import numpy as np
+import pandas as pd
+import os
 from tqdm import tqdm
 
 
@@ -38,6 +40,7 @@ def test(para, sess, model, data_generator):
                         elif outputs[b][p] < 0.5 and labels[b][p] >= 0.5:
                             fn += 1
             count += 1
+            print(count)
             n_samples += np.prod(outputs.shape)
         except:
             break
@@ -57,10 +60,14 @@ def test(para, sess, model, data_generator):
             np.sqrt(test_rse / n_samples) / data_generator.rse
         )
         logging.info("test rse: %.5f, test corr: %.5f" % (test_rse, test_corr))
-        raw_labels = data_generator.scaler.inverse_transform(all_labels) # y_true
-        raw_outputs = data_generator.scaler.inverse_transform(all_outputs) # y_pred
+        logging.info("outputs size {}".format(len(all_outputs)))
+        logging.info("labels size {}".format(len(all_labels)))
+        raw_labels = data_generator.scaler.inverse_transform(all_labels)
+        raw_outputs = data_generator.scaler.inverse_transform(all_outputs)
         pred_df = pd.DataFrame(raw_outputs, columns=data_generator.series)
-        return pred_df
+        pred_df = pd.concat([data_generator.date_col, pred_df], axis=1)
+        pred_df.to_parquet(os.path.join(
+            para.output_dir, para.data_set + '_predict_output.parquet'))
     else:
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)

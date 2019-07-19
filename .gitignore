@@ -1,6 +1,7 @@
 .python-version
 models/*
 data/*
+output/
 lib/__pycache__
 .idea/
 .DS_store

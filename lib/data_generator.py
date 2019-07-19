@@ -8,6 +8,7 @@ import tarfile
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
+import pandas as pd
 # import pypianoroll as ppr
 import tensorflow as tf
 from tensorflow.contrib.learn.python.learn.datasets import mnist
@@ -47,6 +48,8 @@ class DataGenerator(metaclass=ABCMeta):
                              "'train', 'validation', or 'test'".format(mode))
 
         filename = self.DATA_PATH + "/" + mode + ".tfrecords"
+        date_file = os.path.join(self.DATA_PATH,mode+"_date.csv")
+        self.date_col = pd.read_csv(date_file,header=None,usecols=[1],names=['date'])
         logging.info("Loading data from {}".format(filename))
 
         with tf.name_scope("input"):
@@ -404,11 +407,9 @@ class customDataGenerator(DataGenerator):
 
     def _load(self, para):
         df = pd.read_parquet(para.dataset_address)
-        self.split.append(max(df['date']))
         self.raw_data = df
 
     def _preprocess(self, para):
-        print(self.split)
         para.input_size = self.INPUT_SIZE = self.raw_data.shape[1] - 1
         self.rse = self._compute_rse()
         logging.info('rse = {}'.format(self.rse))
@@ -426,36 +427,44 @@ class customDataGenerator(DataGenerator):
         self.scaler = scaler
         self.series = series
 
-        for i in range(len(self.split)):
-            print(i, self.split[i], self.split_names[i])
-            temp_df = df[df['date'] <= self.split[i]]
-            print(len(temp_df))
-            df = df[df['date'] > self.split[i]]
-            self._convert_to_tfrecords(temp_df, self.split_names[i])
+        split_index = [self.raw_data[self.raw_data['date'] == i].index[0]
+                       for i in self.split]
+        split_index = [0] + split_index + [len(self.raw_data)]
+        for i in range(len(self.split_names)):
+            print(split_index[i], split_index[i + 1],
+                  split_index[i + 1] - split_index[i])
+            self._convert_to_tfrecords(
+                split_index[i], split_index[i + 1], self.split_names[i])
+        del self.raw_data
 
-    def _convert_to_tfrecords(self, df, name):
+    def _convert_to_tfrecords(self, start_index, end_index, name):
         out_fn = os.path.join(self.DATA_PATH, name + ".tfrecords")
-        date_fn = os.path.join(self.DATA_PATH, name + '_date.parquet')
-        df = df.drop(columns=['date'])
-        df = df.values
+        date_fn = os.path.join(self.DATA_PATH, name + "_date.csv")
+        start = -1
         if check_path_exists(out_fn):
             return
         with tf.python_io.TFRecordWriter(out_fn) as record_writer:
-            for target in tqdm(range(len(df))):
+            for target in tqdm(range(start_index, end_index)):
                 end = target - self.h + 1
                 beg = end - self.para.max_len
                 if beg < 0:
                     continue
+                if start < 0:
+                    start = target
                 example = tf.train.Example(
                     features=tf.train.Features(
                         feature={
                             "x":
-                            self._float_list_feature(df[beg:end].
+                            self._float_list_feature(self.raw_data.loc[beg:end - 1, self.series].values.
                                                      flatten()),
                             "y":
-                            self._float_list_feature(df[target]),
+                            self._float_list_feature(
+                                self.raw_data.loc[target, self.series].values),
                         }))
+                # print(self.raw_data.loc[beg:end,self.series].values.flatten())
                 record_writer.write(example.SerializeToString())
+            # print(self.raw_data.loc[beg:end,self.series].values.flatten())
+            self.raw_data.loc[start:end_index - 1, 'date'].to_csv(date_fn)
 
     def _get_map_functions(self):
         return []
