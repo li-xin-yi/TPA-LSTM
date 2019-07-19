@@ -27,6 +27,7 @@ conda install --file requirements.txt
   - [x] 模型成功运行并log输出误差
 
 - [ ] 修正多次在本地导出数据以及其导致的重复log问题
+  - [x] 修正重复log问题
 - [x] 恢复出预测结果的原始数据并存储
   - [x] 预测结果（包含时间戳）保存为`<output_dir>/<data_set>_predict_output.parquet`文件
   - [ ] 简化本地目录读写，在序列化过程中关联时间戳

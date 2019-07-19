@@ -52,6 +52,7 @@ def logging_config_setup(para):
             level=para.logging_level,
             format='%(levelname)-8s - %(message)s',
             filename=para.model_dir + '/progress.txt')
+        logging.getLogger().handlers.clear()
         logging.getLogger().addHandler(logging.StreamHandler())
     tf.logging.set_verbosity(tf.logging.ERROR)
 
